@@ -211,8 +211,9 @@ static bool pivot(int count, int countC) {
 	bool red = false;
 	int skipK = 0;
 	for (int i = 0; i < n_colsA; i++) {
-		pivot = valuesU[row_ptr_beginU[i]];
+		pivot = values[row_ptr_begin[i] + i];
 		int skipu = 0;
+
 		for (int j = i + 1; j < n_rowsA; j++) {
 			if (i > (row_ptr_end[j] - row_ptr_begin[j])) {
 				int diff = (row_ptr_end[j] - row_ptr_begin[j]);
@@ -285,7 +286,7 @@ static bool pivot(int count, int countC) {
 				}
 				else {
 
-					valuesU[row_ptr_beginU[j] + offset - skipK] = valuesU[row_ptr_beginU[j] + k] - mult * values[row_ptr_begin[i] + k];
+					valuesU[row_ptr_beginU[j] + offset - skipK] = values[row_ptr_begin[j] + k] - mult * values[row_ptr_begin[i] + k];
 					col_indU[row_ptr_beginU[j] + offset - skipK] = k;
 					if (j == k) {
 						if (valuesU[row_ptr_beginU[j] + offset - skipK] != 0) {
