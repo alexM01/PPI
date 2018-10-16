@@ -211,9 +211,8 @@ static bool pivot(int count, int countC) {
 	bool red = false;
 	int skipK = 0;
 	for (int i = 0; i < n_colsA; i++) {
-		pivot = values[row_ptr_begin[i] + i];
+		pivot = valuesU[row_ptr_beginU[i]];
 		int skipu = 0;
-
 		for (int j = i + 1; j < n_rowsA; j++) {
 			if (i > (row_ptr_end[j] - row_ptr_begin[j])) {
 				int diff = (row_ptr_end[j] - row_ptr_begin[j]);
@@ -237,64 +236,127 @@ static bool pivot(int count, int countC) {
 			}
 			int offset = 0;
 			row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
-			if (j ==16) {
+			if (j == 17) {
+				int sv = 9;
+			}
+			if (j == 79) {
 				int s = 1;
 			}
-
-			for (int k = j; k < n_colsA; k++) {
+			int cdSkip = 0;
+			bool rightSide = false;
+			bool skipRight = false;
+			row_ptr_endU[j] = row_ptr_endU[j - 1] + 1;
+			int rightSkip = 0;
+			bool continueK = false;
+			for (int k = j; k < n_colsA && !continueK; k++) {
+				if (k > col_ind[row_ptr_end[i]] && k > col_ind[row_ptr_end[j]]) {
+					continueK = true;
+					if (k > col_ind[row_ptr_end[j]])
+						row_ptr_endU[j]--;
+					continue;
+				}
+				/*
+				if (j > col_ind[row_ptr_begin[j]]) {
+					continue;
+				}
+				if (k > col_ind[row_ptr_end[i]]) {
+					if (k > col_ind[row_ptr_end[j]]) {
+						continue;
+					}
+					valuesU[row_ptr_end[j] + offset] = valuesU[row_ptr_end[j] + k];
+					col_ind[row_ptr_end[j] + offset] = col_ind[row_ptr_end[j] + k];
+				}*/
 
 				int diffJ = row_ptr_end[j] - row_ptr_begin[j];
 				int diffI = row_ptr_end[i] - row_ptr_begin[i];
 				int maxDiff = diffJ - diffI > 0 ? diffJ : diffI;
-				
-				if (k > maxDiff && row_ptr_begin[j]+k > row_ptr_end[j] && col_ind[row_ptr_begin[j]] < k && col_ind[row_ptr_end[j]] > k) {
-					int diffK = k - maxDiff;
-					continue;
-				}
-				//row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
 
+				if (k > diffI) {
+					if (col_ind[row_ptr_end[j]] > col_ind[row_ptr_end[i]]) {
+
+						if (col_ind[row_ptr_begin[j] + rightSkip] < k && col_ind[row_ptr_begin[j] + rightSkip+1] > k) {
+							continue;
+						}
+						while (col_ind[row_ptr_begin[j] + rightSkip] < k) {
+							rightSkip++;
+						}
+						if (k > col_ind[row_ptr_end[j]]) {
+							if (!rightSide) {
+								rightSide = true;
+								row_ptr_endU[j] -= 1;
+							}
+							continue;
+						}
+
+
+						valuesU[row_ptr_beginU[j] + offset] = values[row_ptr_begin[j] + rightSkip];
+						col_indU[row_ptr_beginU[j] + offset] = col_ind[row_ptr_begin[j] + rightSkip];
+						row_ptr_endU[j] += 1;
+						if (row_ptr_endU[j] == 170) {
+							int b = 0;
+						}
+						offset++;
+						if (row_ptr_begin[j]+k > row_ptr_end[j]) {
+							continue;
+						}
+						else{
+							valuesU[row_ptr_begin[j] + offset] = values[row_ptr_begin[j] + k];
+						}
+					}
+					else continue;
+				}
+				if (row_ptr_begin[j] + k == 288) {
+					int s2 = 1;
+				}
+				//i = 0
+				//row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
+				// if (col_ind[row_ptr_end[j]] != col_ind[row_ptr_end[i]]) {
 				if (col_ind[row_ptr_begin[j] + k ] != col_ind[row_ptr_begin[i] + k]) {
-					int diff1 = col_ind[row_ptr_begin[j + 1] + k];
-					int diff2 = col_ind[row_ptr_begin[j] + k];
-					int cdiff = col_ind[row_ptr_begin[j + 1] + k] - col_ind[row_ptr_begin[j] + k];
-					if (col_ind[row_ptr_begin[j]] < k) {
+					if (j == k) {
+						int m = 0;
+					}
+					int cdiff = col_ind[row_ptr_begin[i]] - col_ind[row_ptr_begin[j]];
+					/*
+					if (col_ind[row_ptr_end[j]] < j) {
 						row_ptr_endU[j] = row_ptr_beginU[j] + (row_ptr_end[j] - row_ptr_begin[j] - k);
 					}
 					else {
 						row_ptr_endU[j] = row_ptr_beginU[j] + (row_ptr_end[j] - row_ptr_begin[j]);
-					}
-						
+					}*/
+
 					if (cdiff < 0) {
-						valuesU[row_ptr_begin[j] + k] = values[row_ptr_begin[i] + k] * -1;
-						col_indU[row_ptr_begin[j] + k] = col_ind[row_ptr_begin[i] + k];
+						valuesU[row_ptr_beginU[j] + k] = values[row_ptr_begin[i] + k] * -1;
+						col_indU[row_ptr_beginU[j] + k] = col_ind[row_ptr_begin[i] + k];
 						row_ptr_endU[j] = row_ptr_endU[j] + 1;
 					}
 					else {
 						if (row_ptr_begin[j] + k < row_ptr_end[j]) {
-							valuesU[row_ptr_begin[j] + k] = values[row_ptr_begin[j] + k];
-							col_indU[row_ptr_begin[j] + k] = col_ind[row_ptr_begin[j] + k];
+							valuesU[row_ptr_beginU[j] + offset] = values[row_ptr_begin[j] + k];
+							col_indU[row_ptr_beginU[j] + offset] = col_ind[row_ptr_begin[j] + k];
 							row_ptr_endU[j] = row_ptr_endU[j] + 1;
+							cdSkip += 1;
 						}
 						else {
 							for (int cd = 0; cd < abs(cdiff); cd++) {
-								valuesU[row_ptr_begin[j] + cd] = values[row_ptr_begin[j] + k + cd];
-								col_indU[row_ptr_begin[j] + cd] = col_ind[row_ptr_begin[j] + k + cd];
+								valuesU[row_ptr_beginU[j] + offset + cd] = values[row_ptr_begin[j] + k + cd];
+								col_indU[row_ptr_beginU[j] + offset + cd] = col_ind[row_ptr_begin[j] + k + cd];
 								row_ptr_endU[j] = row_ptr_endU[j] + 1;
+								cdSkip += 1;
 							}
 						}
 					}
 				}
 				else {
 
-					valuesU[row_ptr_beginU[j] + offset - skipK] = values[row_ptr_begin[j] + k] - mult * values[row_ptr_begin[i] + k];
-					col_indU[row_ptr_beginU[j] + offset - skipK] = k;
+					valuesU[row_ptr_beginU[j] + offset - skipK + cdSkip] = values[row_ptr_begin[j] + k] - mult * values[row_ptr_begin[i] + k];
+					col_indU[row_ptr_beginU[j] + offset - skipK + cdSkip] = k;
 					if (j == k) {
 						if (valuesU[row_ptr_beginU[j] + offset - skipK] != 0) {
 							//row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
 							row_ptr_endU[j] = row_ptr_beginU[j] + (row_ptr_end[j] - row_ptr_begin[j] - k - skipK);
 						}
 					}
-					if (valuesU[row_ptr_beginU[j] + offset - skipK] == 0) {
+					if (valuesU[row_ptr_beginU[j] + offset - skipK + cdSkip] == 0) {
 						row_ptr_endU[j]--;
 					}
 				}
