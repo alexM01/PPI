@@ -66,15 +66,19 @@ static int row_ptr_end[max_n_rows];
 static int pBsize;
 static double valuesL[max_n_elements];
 static double valuesU[max_n_elements];
+static double valuesLU[max_n_elements];
 static double col_indL[max_n_elements];
+static double col_indLU[max_n_elements];
 static double col_indU[max_n_elements];
-static int row_ptr_beginL[16384];
-static int row_ptr_beginU[16384];
-static int row_ptr_beginUBackup[16384];
-static int  row_ptr_endL[16384];
-static int row_ptr_endU[16384];
-static int skip[16384];
-static int skip2[16384];
+static int row_ptr_beginLU[max_n_rows];
+static int row_ptr_beginL[max_n_rows];
+static int row_ptr_beginU[max_n_rows];
+static int row_ptr_beginUBackup[max_n_rows];
+static int  row_ptr_endL[max_n_rows];
+static int  row_ptr_endLU[max_n_rows];
+static int row_ptr_endU[max_n_rows];
+static int skip[max_n_rows];
+static int skip2[max_n_rows];
 static double results[max_n_elements];
 static double resultsx[max_n_elements];
 static double resultsb[max_n_elements];
@@ -143,275 +147,211 @@ static bool switchRows(int currentRow, int newRow) {
 	return true;
 }
 
-static void factorL() {
-	bool newline = true;
-	double pivot, mult;
-	for (int i = 0; i < n_colsA; i++) {
-		pivot = values[row_ptr_begin[i] + i];
-		for (int j = i + 1; j < n_rowsA; j++) {
-			int stop3, stop4;
-			if (row_ptr_beginL[j] + i == 155) {
-				stop3 = row_ptr_beginL[j] + i;
-				stop4 = row_ptr_endL[j];
-				int stop5 = 9;
+static void offsetMatrix(int lastIndex, int lastRow, int row, int index, int upper,  int column, double value, bool search) {
+	bool skip = false;
+	if (search) {
+		for (int s = index-1; s < upper && !skip; s++) {
+			if (col_ind[s] < column && col_ind[s+1] > column) {
+				column = col_ind[s]+1;
+				index = s+1;
+				skip = true;
+				break;
 			}
-			if ((row_ptr_beginL[j] + i) > 0 && (row_ptr_beginL[j] + i) >= row_ptr_endL[j]) {
-				int diff = (row_ptr_endL[j] - row_ptr_beginL[j]);
-				continue;
-			}
-			if ((i > col_ind[row_ptr_begin[j] + i]) || (i > (row_ptr_end[j] - row_ptr_begin[j]))) {
-				int diff = (row_ptr_end[j] - row_ptr_begin[j]);
-				continue;
-			}
-			if (values[row_ptr_begin[j] + i] == 0) {
-				skip2[j++];
-				continue;
-			}
-			mult = values[row_ptr_begin[j] + i] / pivot;
-			if (i == 1 && j == 17) {
-				int stop = values[row_ptr_begin[j] + i];
-			}
-			if (newline && mult != 0 && i == 0) {
-
-
-				row_ptr_beginL[j] = row_ptr_endL[j - 1] + 1;
-				//save end pointer number, subtract 1 for each 0 per row
-				row_ptr_endL[j] = row_ptr_beginL[j] + j - skip[j];
-				valuesL[row_ptr_endL[j]] = 1;
-
-				col_indL[row_ptr_endL[j]] = j - skip2[j];
-			}
-
-			if (j > skip[j]) {
-				valuesL[row_ptr_beginL[j] + i] = mult;
-				//valuesU[row_ptr_begin[j] + i] = 0;
-				col_indL[row_ptr_beginL[j] + i] = i + skip[j];
-			}
-
 		}
 	}
+	if (index > row_ptr_end[row]) {
+		index = row_ptr_end[row];
+	}
+	for (int l = lastIndex; l>= index; l--) {
+		values[l + 1] = values[l];
+	}
+	for (int l = lastIndex; l>= index; l--) {
+		col_ind[l + 1 ] = col_ind[l];
+	}
+	for (int r = row; r <= lastRow; r++ ) {
+		row_ptr_end[r] += 1;
+	}
+	for (int r = row+1; r <= lastRow ; r++) {
+		row_ptr_begin[r] += 1;
+	}
+	col_ind[index] = column;
+	values[index] = value;
+	
 }
-
+//Most important function
 static bool pivot(int count, int countC) {
-
-	valuesL[0] = 1;
-	col_indL[0] = 0;
-	row_ptr_beginL[0] = 0;
-	row_ptr_endL[0] = 0;
-	//copy first row
-	for (int k = 0; k <= row_ptr_end[0]; k++) {
-		valuesU[k] = values[k];
-		col_indU[k] = col_ind[k];
-		if (k > 0) {
-			valuesL[k] = 0;
+	int lastIndex = 0;
+	//get length of values-array
+	for (int i = 0; i < max_n_elements; i++) {
+		if (values[i] != 0) {
+			lastIndex = i;
 		}
 	}
-	row_ptr_beginU[0] = row_ptr_begin[0];
-	row_ptr_endU[0] = row_ptr_end[0];
+	//get length of row_ptr array
+	int lastRow = 0;
+	for (int i = 0; i < max_n_rows; i++) {
+		if (row_ptr_begin[i] != 0) {
+			lastRow = i;
+		}
+	}
+	//declare variables 
 	double pivot, mult;
-	bool newline = true;
-	bool red = false;
-	int skipK = 0;
+	//for each column, get pivot variable and perform gaussian elimination with it
 	for (int i = 0; i < n_colsA; i++) {
-		pivot = valuesU[row_ptr_beginU[i]];
-		int skipu = 0;
+		//get pivot value for current column
+		pivot = values[row_ptr_beginU[i]+i];
+		//go down from pivot value for each row
 		for (int j = i + 1; j < n_rowsA; j++) {
-			if (i > (row_ptr_end[j] - row_ptr_begin[j])) {
-				int diff = (row_ptr_end[j] - row_ptr_begin[j]);
-				skipK += row_ptr_end[j] - row_ptr_begin[j];
+
+			int col = col_ind[row_ptr_begin[j] + i];
+			//If column of pivot variable not same as i, the value is 0 --> skip
+			if (col != i) {
 				continue;
 			}
-
+			//determine value to write into L-matrix and write it there 
 			mult = values[row_ptr_begin[j] + i] / pivot;
-			if (i == 0 && col_ind[row_ptr_begin[j]] > 0) {
-				skip[j] += j > col_ind[row_ptr_begin[j]] ? col_ind[row_ptr_begin[j]] : j;
-				
-			}
-
-			if (col_ind[row_ptr_begin[j] + i] < col_ind[row_ptr_begin[i] + i]) {
-				int sdiff = col_ind[row_ptr_begin[j] + i] - col_ind[row_ptr_begin[i] + i];
-				skip[j] += sdiff;
-				continue;
-			}
-			else {
-
-			}
-			int offset = 0;
-			row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
-			if (j == 17) {
-				int sv = 9;
-			}
-			if (j == 79) {
-				int s = 1;
-			}
-			int cdSkip = 0;
-			bool rightSide = false;
-			bool skipRight = false;
-			row_ptr_endU[j] = row_ptr_endU[j - 1] + 1;
-			int rightSkip = 0;
-			bool continueK = false;
-			for (int k = j; k < n_colsA && !continueK; k++) {
-				if (k > col_ind[row_ptr_end[i]] && k > col_ind[row_ptr_end[j]]) {
-					continueK = true;
-					if (k > col_ind[row_ptr_end[j]])
-						row_ptr_endU[j]--;
+			values[row_ptr_begin[j] + i] = mult;
+			col_indLU[row_ptr_begin[j] + i] = i;
+			//for each row j, perform A[j,k] = A[j,k]-mult*A[i,k]
+			for (int k = j; k < n_colsA; k++) {
+				//If k is outside of the matrix boundaries --> row finished for both i and j
+				if (k > (col_ind[row_ptr_end[i]]- col_ind[row_ptr_begin[i]]) && k > (col_ind[row_ptr_end[j]]- col_ind[row_ptr_begin[j]])) {
 					continue;
 				}
-				/*
-				if (j > col_ind[row_ptr_begin[j]]) {
+				//k greater than i --> values[j] should stay the same
+				if (k > col_ind[row_ptr_end[i]]- col_ind[row_ptr_begin[i]]) {
 					continue;
 				}
-				if (k > col_ind[row_ptr_end[i]]) {
-					if (k > col_ind[row_ptr_end[j]]) {
-						continue;
+				//If k outside of j row boundaries
+				if(row_ptr_begin[j]+k > row_ptr_end[j]){
+					//Insert A[i,k] value to the beginning of A[j,k] and update following and dependent values 
+					if (col_ind[row_ptr_begin[j]] > col_ind[row_ptr_begin[i]+k]) {
+						offsetMatrix(lastIndex, lastRow, j, row_ptr_begin[j], 0, col_ind[row_ptr_begin[i] + k], values[row_ptr_begin[i] + k] * -1, false);
 					}
-					valuesU[row_ptr_end[j] + offset] = valuesU[row_ptr_end[j] + k];
-					col_ind[row_ptr_end[j] + offset] = col_ind[row_ptr_end[j] + k];
-				}*/
-
-				int diffJ = row_ptr_end[j] - row_ptr_begin[j];
-				int diffI = row_ptr_end[i] - row_ptr_begin[i];
-				int maxDiff = diffJ - diffI > 0 ? diffJ : diffI;
-
-				if (k > diffI) {
-					if (col_ind[row_ptr_end[j]] > col_ind[row_ptr_end[i]]) {
-
-						if (col_ind[row_ptr_begin[j] + rightSkip] < k && col_ind[row_ptr_begin[j] + rightSkip+1] > k) {
-							continue;
-						}
-						while (col_ind[row_ptr_begin[j] + rightSkip] < k) {
-							rightSkip++;
-						}
-						if (k > col_ind[row_ptr_end[j]]) {
-							if (!rightSide) {
-								rightSide = true;
-								row_ptr_endU[j] -= 1;
-							}
-							continue;
-						}
-
-
-						valuesU[row_ptr_beginU[j] + offset] = values[row_ptr_begin[j] + rightSkip];
-						col_indU[row_ptr_beginU[j] + offset] = col_ind[row_ptr_begin[j] + rightSkip];
-						row_ptr_endU[j] += 1;
-						if (row_ptr_endU[j] == 170) {
-							int b = 0;
-						}
-						offset++;
-						if (row_ptr_begin[j]+k > row_ptr_end[j]) {
-							continue;
-						}
-						else{
-							valuesU[row_ptr_begin[j] + offset] = values[row_ptr_begin[j] + k];
-						}
+					else {
+						//insert A[i,k] value into jth row
+						offsetMatrix(lastIndex, lastRow, j, row_ptr_begin[j], row_ptr_end[j], col_ind[row_ptr_begin[i] + k], values[row_ptr_begin[i] + k] * -1, true);
 					}
-					else continue;
+					continue;
 				}
-				if (row_ptr_begin[j] + k == 288) {
-					int s2 = 1;
-				}
-				//i = 0
-				//row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
-				// if (col_ind[row_ptr_end[j]] != col_ind[row_ptr_end[i]]) {
-				if (col_ind[row_ptr_begin[j] + k ] != col_ind[row_ptr_begin[i] + k]) {
-					if (j == k) {
-						int m = 0;
-					}
+				//If k indices of i and j different --> i or j starts earlier
+				if (col_ind[row_ptr_begin[j] + k] != col_ind[row_ptr_begin[i] + k]) {
 					int cdiff = col_ind[row_ptr_begin[i]] - col_ind[row_ptr_begin[j]];
-					/*
-					if (col_ind[row_ptr_end[j]] < j) {
-						row_ptr_endU[j] = row_ptr_beginU[j] + (row_ptr_end[j] - row_ptr_begin[j] - k);
-					}
-					else {
-						row_ptr_endU[j] = row_ptr_beginU[j] + (row_ptr_end[j] - row_ptr_begin[j]);
-					}*/
-
+					int cdiff2 = col_ind[row_ptr_end[i]] - col_ind[row_ptr_end[j]];
+					//if i before j
 					if (cdiff < 0) {
-						valuesU[row_ptr_beginU[j] + k] = values[row_ptr_begin[i] + k] * -1;
-						col_indU[row_ptr_beginU[j] + k] = col_ind[row_ptr_begin[i] + k];
-						row_ptr_endU[j] = row_ptr_endU[j] + 1;
-					}
+						offsetMatrix(lastIndex, lastRow, j, row_ptr_begin[j] + k, 0, col_ind[row_ptr_begin[i] + k], values[row_ptr_begin[i] + k ] *-1, false);
+					}//else
 					else {
-						if (row_ptr_begin[j] + k < row_ptr_end[j]) {
-							valuesU[row_ptr_beginU[j] + offset] = values[row_ptr_begin[j] + k];
-							col_indU[row_ptr_beginU[j] + offset] = col_ind[row_ptr_begin[j] + k];
-							row_ptr_endU[j] = row_ptr_endU[j] + 1;
-							cdSkip += 1;
+						if (col_ind[row_ptr_begin[i] + k] < k) {
+							continue;
 						}
 						else {
-							for (int cd = 0; cd < abs(cdiff); cd++) {
-								valuesU[row_ptr_beginU[j] + offset + cd] = values[row_ptr_begin[j] + k + cd];
-								col_indU[row_ptr_beginU[j] + offset + cd] = col_ind[row_ptr_begin[j] + k + cd];
-								row_ptr_endU[j] = row_ptr_endU[j] + 1;
-								cdSkip += 1;
-							}
+							values[row_ptr_begin[j] + k] = values[row_ptr_begin[j] + k] - mult * values[row_ptr_begin[j] + k];
 						}
+						
 					}
 				}
 				else {
-
-					valuesU[row_ptr_beginU[j] + offset - skipK + cdSkip] = values[row_ptr_begin[j] + k] - mult * values[row_ptr_begin[i] + k];
-					col_indU[row_ptr_beginU[j] + offset - skipK + cdSkip] = k;
-					if (j == k) {
-						if (valuesU[row_ptr_beginU[j] + offset - skipK] != 0) {
-							//row_ptr_beginU[j] = row_ptr_endU[j - 1] + 1;
-							row_ptr_endU[j] = row_ptr_beginU[j] + (row_ptr_end[j] - row_ptr_begin[j] - k - skipK);
-						}
-					}
-					if (valuesU[row_ptr_beginU[j] + offset - skipK + cdSkip] == 0) {
-						row_ptr_endU[j]--;
-					}
+					//k values are the same for i and j
+					values[row_ptr_begin[j] + k] = values[row_ptr_begin[j] + k] - mult * values[row_ptr_begin[i] + k];
+					col_indU[row_ptr_beginU[j] + k] = k;
 				}
-
-				offset++;
 			}
-			offset = 0;
-			newline = true;
+
 		}
 	}
-	factorL();
 	return true;
+	
 }
+//Split values matrix into two matrices: L for lower triangle and U for upper triangle
+static void LUfactor() {
+	//L matrix
+	//init first row of L matrix
+	row_ptr_beginL[0] = 0;
+	row_ptr_endL[0] = row_ptr_beginL[0];
+	//diagonal 1-matrix
+	valuesL[0] = 1;
+	col_indL[0] = 0;
+	//continue for rest of L matrix, row ends one column "earlier" for each row
+	for (int i = 1; i < n_rowsA; i++) {
+		row_ptr_beginL[i] = row_ptr_endL[i-1] + 1;
+		valuesL[row_ptr_beginL[i]+i] = 1;
+		col_indL[row_ptr_beginL[i] + i] = i;
+		row_ptr_endL[i] = row_ptr_beginL[i] + i;
+		for (int j = 0; j < i &&  row_ptr_begin[i] + j <= row_ptr_end[i]; j++) {
+			if (values[row_ptr_begin[i] + j] == 0)
+				break;
+			valuesL[row_ptr_beginL[i] + j] = values[row_ptr_begin[i] + j];
+			col_indL[row_ptr_beginL[i] + j] = j;
+		}
+	}
+	// U matrix
+	//init first row of U matrix
+	row_ptr_beginU[0] = 0;
+	row_ptr_endU[0] = row_ptr_end[0];
+	//continue for rest of U matrix, matrix starts one column "later" for each row
+	for (int i = row_ptr_beginU[0]; i <= row_ptr_endU[0]; i++) {
+		valuesU[i] = values[i];
+		col_indU[i] = col_ind[i];
+	}
+	for (int i = 1; i < n_rowsA; i++) {
+		row_ptr_beginU[i] = row_ptr_endU[i-1] +1;
+		int offset = 0;
+		int skip = 0;
+		for (int k = row_ptr_begin[i]; k <= row_ptr_end[i]; k++) {
+			if (col_ind[k] < i) {
+				skip++;
+			}
+			else {
+				break;
+			}
+		}
+		for (int j = row_ptr_begin[i]+skip; j <= row_ptr_end[i]; j++) {
+			
+			valuesU[row_ptr_beginU[i]+offset] = values[j];
+			col_indU[row_ptr_beginU[i]+offset] = offset;
+			offset++;
+		}
+		row_ptr_endU[i] = row_ptr_beginU[i] + offset-1;
+	}
 
+}
 static bool factorize(int count, int countC) {
 	int arr;
 	pBsize = sizeof(row_ptr_begin) / sizeof(*row_ptr_begin);
-	arr = 10;/*
+	arr = 10;
+	//Switch rows so that no pivot value is zero
 	int currentRow = -1, newRow = -1;
 	currentRow, newRow = PivotIsZero();
 	if (!switchRows(currentRow, newRow)) {
-	printf("error");
-	return false;
-	}*/
-	//Factorize
-	//Initialize L & U matrices
-	pivot(count, countC);
-	/*
-	int COUNT = 0;
-	int vSize = sizeof(valuesL) / sizeof(valuesL[0]);
-	for (int i = 0; i < vSize; i++) {
-	if (valuesL[i] != 0) //which means this element is true, not empty element.
-	COUNT++;
+		printf("error");
+		return false;
 	}
-	int COUNT1 = 0;
-	int vSize1 = sizeof(valuesU) / sizeof(valuesU[0]);
-	for (int i = 0; i < vSize1; i++) {
-	if (valuesU[i] != 0) //which means this element is true, not empty element.
-	COUNT1++;
-	}*/
+	
+	//compute A matrix from which L&U matrices are derived
+	pivot(count, countC);
+	//Initialize L & U matrices
+	LUfactor();
+	
 
 	return true;
 
 }
+//Depending on index multiply different vectors and matrices, incomplete
 static void multiplication(int index) {
+	//L*(U*x) = b
 	double prod;
 	if (index == 0) {
+		//for each row
 		for (int i = 0; i < n_rowsA; i = i + 1)
 		{
+			//for each column
 			for (int k = row_ptr_beginL[i]; k <= row_ptr_endL[i]; k = k + 1)
 			{
+				//for each column with a value in ValueL
 				for (int c = 0; c < n_colsA; c++) {
-					if (c == col_indL[k]) {
+					if (c == col_ind[k]) {
 						prod = resultsx[c] * valuesL[row_ptr_begin[i] + k];
 						resultsb[i] = resultsb[i] + prod;
 					}
@@ -420,12 +360,15 @@ static void multiplication(int index) {
 			}
 		}
 	}
-
+	//(U*X)
 	if (index == 1) {
+		//for each row
 		for (int i = 0; i < n_rowsA; i = i + 1)
 		{
+			//for each column
 			for (int k = row_ptr_beginU[i]; k <= row_ptr_endU[i]; k = k + 1)
 			{
+				//for each column with a value in ValueU
 				for (int c = 0; c < n_colsA; c++) {
 					if (c == col_indU[k]) {
 						prod = xvector[c] * valuesU[row_ptr_begin[i] + k];
@@ -435,11 +378,15 @@ static void multiplication(int index) {
 			}
 		}
 	}
+	//A*x
 	if (index == 2) {
+		//for each row
 		for (int i = 0; i < n_rowsA; i = i + 1)
 		{
+			//for each column
 			for (int k = row_ptr_begin[i]; k <= row_ptr_end[i]; k = k + 1)
 			{
+				//for each column with a value in ValueU
 				for (int c = 0; c < n_colsA; c++) {
 					if (c == col_ind[k]) {
 						prod = xvector[c] * values[row_ptr_begin[i] + k];
@@ -449,29 +396,19 @@ static void multiplication(int index) {
 			}
 		}
 	}
-}/*
-static void MatrixMultiplication() {
-for (int i = 0; i < n_rowsA; i = i + 1)
-{
-for (int k = row_ptr_beginL[i]; k <= row_ptr_endL[i]; k = k + 1)
-{
-for (int c = 0; c < n_colsA; c++) {
-if (col_indU[k] == c) {
-resultsM[i] = resultsM[i] + valuesU[k] * valuesL[row_ptr_begin[i]];
 }
-
-}
-
-}
-}
-}*/
-
+//No gaussian substitution implemented
 static void substitution(int index) {
 	//index = 0 --> Ly = resultB
 	int col_in = 9;
 }
 
-
+//Initialize x-vector
+//index = 0 --> all 1
+//index = 1 --> all .1
+//index = 2 --> alternating 1, -1
+//index = 3 --> alternating 5, -5
+//index = 4 --> alternating 100, -100
 static void init(int index) {
 	if (index == 0) {
 		for (int m = 0; m < sizeof(xvector) / sizeof(xvector[0]); m++) {
@@ -511,41 +448,35 @@ static void init(int index) {
 	}
 
 }
-
+/*
 
 int
 main(int argc, char **argv)
 {
-	printf("Tset");
-	/*
-	if (argc != 2)
-	{
-	fprintf(stderr, "usage: %s <filename>\n", argv[0]);
-	return -1;
-	}
-	*/
 	int nnz, n_rows, n_cols;
 	bool ok(false);
+	//change argv[1] to filename if you wish to run the script from an IDE with a fixed matrix
 	const char * filename = "mcfe.mtx";
 	ok = load_matrix_market(filename, max_n_elements, max_n_rows,
 		nnz, n_rows, n_cols,
 		values, col_ind, row_ptr_begin, row_ptr_end);
 	n_rowsA = n_rows;
 	n_colsA = n_cols;
+	for (int i = 0; i < max_n_elements; i++) {
+		valuesLU[i] = values[i];
+		col_indLU[i] = col_ind[i];
+	}
+	for (int i = 0; i < max_n_rows; i++) {
+		row_ptr_beginLU[i] = row_ptr_begin[i];
+		row_ptr_endLU[i] = row_ptr_end[i];
+	}
+
+	
 	if (!ok)
 	{
 		fprintf(stderr, "failed to load matrix.\n");
 		return -1;
 	}
-	/*
-	double** l = new double*[n_rows];
-	for (int i = 1; i < n_rows; ++i)
-	l[i] = new double[n_cols];
-
-
-	double** u = new double*[n_rows];
-	for (int i = 1; i < n_rows; ++i)
-	u[i] = new double[n_cols];*/
 
 	for (int i = 1; i < n_cols; i++) {
 		int maxCol = 0;
@@ -569,7 +500,7 @@ main(int argc, char **argv)
 	int Count2 = 0;
 	int vSize = sizeof(values) / sizeof(values[0]);
 	for (int i = 0; i < vSize; i++) {
-		if (values[i] != 0) //which means this element is true, not empty element.
+		if (values[i] != 0) //check if element non-zero
 		{
 			COUNTV++;
 		}
@@ -580,87 +511,28 @@ main(int argc, char **argv)
 	int COUNTC = 0;
 	int cSize = sizeof(col_ind) / sizeof(col_ind[0]);
 	for (int i = 0; i < cSize; i++) {
-		if (col_ind[i] != 0) //which means this element is true, not empty element.
+		if (col_ind[i] != 0) // check if element non - zero
 			COUNTC++;
 	}
+	//initialize different x vectors
 	init(0);
-
-	//double nvalues[COUNT];
-
-
-
-	//CSR Multiplication
-
-
-	/*
-	int COUNT = 0;
-	int vSize2 = sizeof(valuesL) / sizeof(valuesL[0]);
-	for (int i = 0; i < vSize2; i++) {
-	if (valuesL[i] == 1) //which means this element is true, not empty element.
-	COUNT++;
-	}
-	int COUNT1 = 0;
-	int vSize1 = sizeof(valuesU) / sizeof(valuesU[0]);
-	for (int i = 0; i < vSize1; i++) {
-	if (valuesU[i] != 0) //which means this element is true, not empty element.
-	COUNT1++;
-	}int COUNTcL = 0;
-	int cSizeL = sizeof(col_indL) / sizeof(col_indL[0]);
-	for (int i = 0; i < cSizeL; i++) {
-	if (col_indL[i] != 0) //which means this element is true, not empty element.
-	COUNTcL++;
-	}
-	int COUNT1cU = 0;
-	int cSizeU = sizeof(col_indU) / sizeof(col_indU[0]);
-	for (int i = 0; i < cSizeU; i++) {
-	if (col_indU[i] != 0) //which means this element is true, not empty element.
-	COUNT1cU++;
-	}
-	int s = 1;*/
-
-	/*
-	Factorization
-	int n, i, k, j, p, sum;
-	for(k=1;k<=n;k++)
-	{
-	u[k][k]=1;
-	for(i=k;i<=n;i++)
-	{
-	sum=0;
-	for(p=1;p<=k-1;p++)
-	sum+=l[i][p]*u[p][k];
-	l[i][k]=a[i][k]-sum;
-	}
-
-	for(j=k+1;j<=n;j++)
-	{
-	sum=0;
-	for(p=1;p<=k-1;p++)
-	sum+=l[k][p]*u[p][j];
-	u[k][j]=(a[k][j]-sum)/l[k][k];
-	}
-	}*/
 
 
 	/* For debugging, can be removed when implementation is finished.*/
 	//dump_nonzeros(n_rows, values, col_ind, row_ptr_begin, row_ptr_end);
 	//bool(stop) = false;
-
+/*
 	struct timespec start_time;
 	clock_gettime(CLOCK_REALTIME, &start_time);
 
-	/* Perform LU factorization here*/
-
+	/* Perform LU factorization here
+	//check if any errors occurred
 	if (!factorize(COUNTV, COUNTC)) {
 		exit(-2);
 	}
-	//pb
-	multiplication(1);
-	//substitution
-
-	int stop2 = 9;
-	//MatrixMultiplication();
-	int stop = 10;
+	//call different multiplication executions, according to index 2 => A*x = b
+	multiplication(2);
+	//No forward/backward substitution yet
 
 
 	struct timespec end_time;
@@ -676,4 +548,4 @@ main(int argc, char **argv)
 
 
 	return 0;
-}
+}*/
